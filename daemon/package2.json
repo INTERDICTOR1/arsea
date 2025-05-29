@@ -1,0 +1,23 @@
+{
+  "name": "arsea-daemon",
+  "version": "1.0.0",
+  "description": "Arsea Content Blocker - System Daemon",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js",
+    "dev": "nodemon index.js",
+    "install-service": "node scripts/install-service.js",
+    "uninstall-service": "node scripts/uninstall-service.js"
+  },
+  "dependencies": {
+    "node-windows": "^1.0.0",
+    "node-mac": "^1.0.0",
+    "node-linux": "^0.1.2"
+  },
+  "devDependencies": {
+    "nodemon": "^3.0.0"
+  },
+  "keywords": ["content-blocker", "parental-control", "dns-filter"],
+  "author": "Mohammad Shabir Peerzada",
+  "license": "MIT"
+}

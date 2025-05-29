@@ -1,0 +1,8 @@
+Day	Goals
+2	Integrate blocklist dynamically into extension (from Electron)
+3	Build simple block screen UI in extension
+4	Setup communication between Electron and extension
+5	Implement Electron blocklist updating, lock state management
+6	Polish block screen, add basic unlock delay and disable protection
+7	Testing, debugging, and prepare MVP demo
+

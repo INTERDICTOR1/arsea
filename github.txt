@@ -1,0 +1,9 @@
+Quick Checklist / TL;DR:
+
+    Make changes in your VS Code files.
+    Open VS Code Terminal (Ctrl + ` or View -> Terminal).
+    git status (See what's changed)
+    git add . (Stage all changes, or git add <file>)
+    git commit -m "Your informative commit message" (Create a snapshot)
+    git pull origin main (Get latest from GitHub, crucial!)
+    git push origin main (Send your changes to GitHub

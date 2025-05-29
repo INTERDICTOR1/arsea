@@ -1,0 +1,20 @@
+✅ Final Fix Using BFG (Step-by-Step)
+📁 Make sure you're in the root of your arsea project folder.
+🧱 Step 1: Delete the file from Git history (not just the folder)
+
+You should’ve already downloaded bfg.jar. Now run this in PowerShell:
+
+java -jar .\bfg.jar --delete-files electron.exe
+
+⚠️ This doesn't touch your working files — it only erases electron.exe from Git history.
+🧹 Step 2: Cleanup Git
+
+git reflog expire --expire=now --all
+git gc --prune=now --aggressive
+
+This clears old blobs and compresses the repo.
+✅ Step 3: Force Push to GitHub
+
+git push origin main --force
+
+Now GitHub will not reject the push, because electron.exe is no longer in your Git history
