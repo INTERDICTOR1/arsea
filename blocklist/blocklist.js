@@ -2,6 +2,7 @@ const https = require('https');
 const fs = require('fs');
 const path = require('path');
 
+
 const BLOCKLIST_URLS = [
   'https://raw.githubusercontent.com/StevenBlack/hosts/master/hosts',
   'https://someonewhocares.org/hosts/zero/hosts',
