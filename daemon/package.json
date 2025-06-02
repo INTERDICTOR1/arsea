@@ -1,12 +1,13 @@
 {
-  "name": "daemon",
+  "name": "arsea-daemon",
   "version": "1.0.0",
+  "description": "ARSEA Content Blocker Daemon",
   "main": "index.js",
-  "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+  "dependencies": {
+    "native-dns-packet": "^0.1.1"
   },
-  "keywords": [],
-  "author": "",
-  "license": "ISC",
-  "description": ""
+  "scripts": {
+    "start": "node index.js",
+    "test": "node test-daemon.js"
+  }
 }
