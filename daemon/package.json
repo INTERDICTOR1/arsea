@@ -4,6 +4,8 @@
   "description": "ARSEA Content Blocker Daemon",
   "main": "index.js",
   "dependencies": {
+    "cors": "^2.8.5",
+    "express": "^5.1.0",
     "native-dns-packet": "^0.1.1"
   },
   "scripts": {

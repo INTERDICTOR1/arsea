@@ -12,23 +12,36 @@ const dnsPromises = require('dns').promises; // Added for testDNSResolution
 const ArseaDNSProxy = require('./dns-proxy');
 const DNSConfigManager = require('./dns-config'); // Ensure this uses the updated dns-config.js
 
+// Import API Server
+const DaemonAPIServer = require('./api-server'); // INTEGRATED
+const ProcessManager = require('./process-manager');
+
 const execAsync = promisify(exec);
+
+let apiServer = null; // INTEGRATED: To hold the API server instance
+
+// Initialize process manager
+const processManager = new ProcessManager({
+    pidFile: './arsea-daemon.pid',
+    stateFile: './arsea-state.json',
+    shutdownTimeout: 15000
+});
 
 class ArseaDaemon extends EventEmitter {
   constructor(options = {}) {
     super();
-    
+
     // Core state
     this.isRunning = false;
     this.isBlocking = false; // Default to false, CLI or direct calls can enable it
     this.blockedDomains = new Set();
     this.dryRun = options.dryRun || false;
-    
+
     // DNS Components
     // Ensure options.dnsOptions and options.dnsConfigOptions are passed if needed, or defaults are fine
-    this.dnsProxy = new ArseaDNSProxy(options.dnsOptions || {}); 
+    this.dnsProxy = new ArseaDNSProxy(options.dnsOptions || {});
     this.dnsConfig = new DNSConfigManager(options.dnsConfigOptions || {});
-    
+
     // Enhanced stats with DNS metrics
     this.stats = {
       totalBlocked: 0,
@@ -41,20 +54,20 @@ class ArseaDaemon extends EventEmitter {
       dnsAllowed: 0,
       blockingMethod: 'dns-proxy'
     };
-    
+
     // Legacy hosts file paths
     this.hostsPath = this.getHostsPath();
     this.backupPath = path.join(__dirname, 'hosts.backup'); // Used for hosts file, not DNS backup
     this.arseaMarker = '# === ARSEA CONTENT BLOCKER ===';
     this.arseaEndMarker = '# === END ARSEA SECTION ===';
-    
+
     // Enhanced blocklist paths
     // Assuming this path is correct relative to where ArseaDaemon.js is located (e.g., if it's in a 'daemon' subdir)
-    this.blocklistJsonPath = options.blocklistJsonPath || path.join(__dirname, '../blocklist/blocklist/domains.json'); 
+    this.blocklistJsonPath = options.blocklistJsonPath || path.join(__dirname, '../blocklist/blocklist/domains.json');
     // this.blocklistJsPath = path.join(__dirname, '../blocklist/blocklist.js'); // Not currently used in provided code
 
     this.setupDNSEventListeners();
-    
+
     if (this.dryRun) {
       console.log('🧪 DRY RUN MODE - No system changes will be made');
     }
@@ -63,38 +76,38 @@ class ArseaDaemon extends EventEmitter {
   // 🔧 ENHANCED: Updated initialize method
   async initialize() {
     console.log('🚀 Starting Enhanced Arsea Daemon (DNS-based)...');
-    
+
     try {
       // 🚨 NEW: Initialize DNSConfigManager first to use its methods
       await this.dnsConfig.initialize(); // Detects interface, loads existing backup etc.
 
       // 🚨 NEW: Check if DNS is already corrupted before starting
       await this.checkDNSIntegrity();
-      
+
       // System permission checks
       await this.checkSystemPermissions();
-      
+
       // Load blocklist with validation
       await this.loadBlocklist();
-      
+
       // Create emergency backup (includes DNS backup via this.dnsConfig.backup())
       // This ensures a fresh backup attempt IF no valid one was loaded during dnsConfig.initialize()
       // or if we want to ensure it's up-to-date before any potential blocking.
       // The enhanced dnsConfig.backup() will handle not overwriting good backups with localhost.
-      await this.createEmergencyBackup(); 
-      
+      await this.createEmergencyBackup();
+
       this.isRunning = true;
       console.log(`✅ Enhanced Arsea Daemon initialized`);
-      
+
       this.emit('started');
       return true;
-      
+
     } catch (error) {
       console.error('❌ Failed to initialize enhanced daemon:', error.message);
       this.emit('error', error);
       // Attempt graceful shutdown, which includes DNS restoration
       console.log('Attempting shutdown due to initialization error...');
-      await this.shutdown(); 
+      await this.shutdown(); // This will call the daemon's shutdown method
       return false;
     }
   }
@@ -102,15 +115,15 @@ class ArseaDaemon extends EventEmitter {
   // 🔧 NEW: DNS integrity check
   async checkDNSIntegrity() {
     console.log('🔍 Checking DNS integrity before initialization...');
-    
+
     try {
       // Check if current DNS is pointing to localhost
       const currentDNS = await this.dnsConfig.getCurrentDNS();
-      
+
       if (this.dnsConfig.isDNSPointingToLocalhost(currentDNS)) {
         console.warn('⚠️ DNS is currently pointing to localhost!');
         console.warn('This suggests a previous session didn\'t restore properly or another local proxy is active.');
-        
+
         // Attempt to restore DNS to DHCP/automatic
         console.log('Attempting to restore DNS to automatic/DHCP settings...');
         const restoreAttempt = await this.dnsConfig.restoreToAutomatic(); // Uses the method from dns-config.js
@@ -119,11 +132,11 @@ class ArseaDaemon extends EventEmitter {
             // Decide if this is a fatal error for initialization
             throw new Error('DNS integrity check: Automatic DNS restoration failed.');
         }
-        
+
         // Wait a moment for DNS to settle
         console.log('Waiting for DNS settings to apply...');
         await new Promise(resolve => setTimeout(resolve, 3000)); // Increased wait time
-        
+
         // Verify DNS is working by trying to resolve an external domain
         const dnsWorking = await this.testDNSResolution();
         if (!dnsWorking) {
@@ -131,12 +144,12 @@ class ArseaDaemon extends EventEmitter {
           console.error('Your internet connectivity might be affected. Please check your system DNS settings manually.');
           throw new Error('DNS integrity check: DNS restoration failed or DNS is not resolving correctly. Manual intervention required.');
         }
-        
+
         console.log('✅ DNS integrity: DNS restored to a working state from localhost.');
       } else {
         console.log('✅ DNS integrity check passed (DNS not pointing to localhost).');
       }
-      
+
     } catch (error) {
       console.error('❌ DNS integrity check encountered an error:', error.message);
       // Depending on severity, you might re-throw or allow continuation with a warning
@@ -152,10 +165,10 @@ class ArseaDaemon extends EventEmitter {
       console.log(`Testing DNS resolution by looking up "${testDomain}"...`);
       // Set a timeout for the DNS lookup
       const lookupPromise = dnsPromises.lookup(testDomain);
-      const timeoutPromise = new Promise((_, reject) => 
+      const timeoutPromise = new Promise((_, reject) =>
         setTimeout(() => reject(new Error(`DNS lookup for ${testDomain} timed out after 5 seconds`)), 5000)
       );
-      
+
       await Promise.race([lookupPromise, timeoutPromise]);
       console.log(`✅ DNS resolution test for "${testDomain}" passed.`);
       return true;
@@ -210,42 +223,42 @@ class ArseaDaemon extends EventEmitter {
       if (!this.dryRun) {
         // Check DNS proxy port binding (port 53 usually needs elevation)
         const preferredPortAvailable = await this.checkPortAvailability(this.dnsProxy.preferredPort || 53);
-        checks.push({ 
-          check: `DNS Port ${this.dnsProxy.preferredPort || 53}`, 
-          status: preferredPortAvailable, 
-          note: preferredPortAvailable ? 'Likely available' : 'May require elevated privileges or is in use' 
+        checks.push({
+          check: `DNS Port ${this.dnsProxy.preferredPort || 53}`,
+          status: preferredPortAvailable,
+          note: preferredPortAvailable ? 'Likely available' : 'May require elevated privileges or is in use'
         });
         if (!preferredPortAvailable && this.dnsProxy.fallbackPort) {
-             const fallbackPortAvailable = await this.checkPortAvailability(this.dnsProxy.fallbackPort);
-             checks.push({ 
-               check: `DNS Fallback Port ${this.dnsProxy.fallbackPort}`, 
-               status: fallbackPortAvailable, 
-               note: fallbackPortAvailable ? 'Likely available' : 'May require elevated privileges or is in use' 
-             });
+            const fallbackPortAvailable = await this.checkPortAvailability(this.dnsProxy.fallbackPort);
+            checks.push({
+              check: `DNS Fallback Port ${this.dnsProxy.fallbackPort}`,
+              status: fallbackPortAvailable,
+              note: fallbackPortAvailable ? 'Likely available' : 'May require elevated privileges or is in use'
+            });
         }
       }
-      
+
       try { // Hosts file access (legacy, but check remains)
         await fs.access(this.hostsPath, fs.constants.R_OK | fs.constants.W_OK);
         checks.push({ check: 'Hosts File Access', status: true, note: 'R/W Available (for emergency fallback)' });
       } catch {
         checks.push({ check: 'Hosts File Access', status: false, note: 'R/W Not Available' });
       }
-      
+
       // DNS configuration permissions (from DNSConfigManager)
       const dnsConfigCheck = await this.dnsConfig.checkPermissions();
-      checks.push({ 
-        check: 'System DNS Modification', 
-        status: dnsConfigCheck.canModify, 
-        note: dnsConfigCheck.method 
+      checks.push({
+        check: 'System DNS Modification',
+        status: dnsConfigCheck.canModify,
+        note: dnsConfigCheck.method
       });
-      
+
       console.log('🔐 System Permission Check Results:');
       checks.forEach(check => {
         const icon = check.status ? '✅' : (check.note.includes('Requires') || check.note.includes('May require') ? '⚠️' : '❌');
         console.log(`   ${icon} ${check.check}: ${check.note}`);
       });
-      
+
       if (!dnsConfigCheck.canModify && !this.dryRun) {
           console.warn('⚠️  This application may not be able to modify system DNS settings without elevated privileges.');
       }
@@ -275,7 +288,7 @@ class ArseaDaemon extends EventEmitter {
     console.log('📋 Loading blocklist...');
     try {
       const loadResult = await this.loadFromJsonWithValidation(); // Assumes this is the primary method now
-      
+
       if (loadResult.success) {
         await this.dnsProxy.loadBlocklist(Array.from(this.blockedDomains));
         this.stats.blocklistSource = loadResult.source;
@@ -306,13 +319,13 @@ class ArseaDaemon extends EventEmitter {
       const maxSize = 100 * 1024 * 1024; // 100MB
       if (fileStats.size > maxSize) throw new Error(`Blocklist file too large: ${Math.round(fileStats.size / 1024 / 1024)}MB`);
       if (fileStats.size === 0) throw new Error('Blocklist file is empty.');
-      
+
       const data = await fs.readFile(this.blocklistJsonPath, 'utf8');
       let domains;
       try { domains = JSON.parse(data); } catch (e) { throw new Error(`Invalid JSON: ${e.message}`); }
       if (!Array.isArray(domains)) throw new Error('Blocklist must be an array.');
       if (domains.length === 0) throw new Error('Blocklist array is empty.');
-      
+
       const validDomains = new Set();
       let invalidCount = 0;
       domains.forEach(domain => {
@@ -322,10 +335,10 @@ class ArseaDaemon extends EventEmitter {
           else invalidCount++;
         } else invalidCount++;
       });
-      
+
       if (validDomains.size === 0) throw new Error('No valid domains found in blocklist.');
       this.blockedDomains = validDomains;
-      
+
       console.log(`📊 Blocklist Validation: Total ${domains.length}, Valid ${validDomains.size}, Invalid/Skipped ${invalidCount}.`);
       if (invalidCount > 0) console.log(`⚠️ Skipped ${invalidCount} invalid entries.`);
       return { success: true, source: 'domains.json', domains: validDomains.size, fileSize: fileStats.size, invalidCount };
@@ -392,13 +405,13 @@ class ArseaDaemon extends EventEmitter {
       throw error; // Re-throw for CLI to handle
     }
   }
-  
+
   async configureDNSWithGuidance(proxyPort) { // proxyPort is passed from applyBlocking
     console.log(`⚙️ Configuring system DNS to use local proxy at 127.0.0.1 (proxy on port ${proxyPort})...`);
     try {
       // Pass the actual proxy port to dnsConfig.configure for the testDNSServer call within it
-      const configResult = await this.dnsConfig.configure('127.0.0.1', proxyPort); 
-      
+      const configResult = await this.dnsConfig.configure('127.0.0.1', proxyPort);
+
       if (configResult.success) {
         console.log(`✅ System DNS configured successfully via: ${configResult.method || 'unknown method'}`);
       } else {
@@ -431,7 +444,7 @@ class ArseaDaemon extends EventEmitter {
     try {
       await this.checkHostsPermissions(); // May throw if no permission
       await this.createHostsBackup(); // Backup original hosts file
-      
+
       const limitedDomains = Array.from(this.blockedDomains).slice(0, 1000); // Limit for hosts file
       if (limitedDomains.length === 0) {
           console.log('No domains to block in hosts file.');
@@ -441,7 +454,7 @@ class ArseaDaemon extends EventEmitter {
       const currentContent = await this.safeReadHosts();
       const cleanedContent = this.removeArseaEntries(currentContent); // Remove old Arsea section
       const newContent = cleanedContent.trim() + '\n\n' + arseaSection; // Add new section
-      
+
       await this.safeWriteHosts(newContent);
       console.log(`✅ Emergency hosts file blocking applied for ${limitedDomains.length} domains.`);
     } catch (error) {
@@ -467,12 +480,12 @@ class ArseaDaemon extends EventEmitter {
         console.error('❌ Failed to restore system DNS automatically. Manual check required.');
         // Provide guidance based on restoreResult.error if available
       }
-      
+
       // Optional: Clean up hosts file if emergency fallback was used
       // if (this.stats.blockingMethod === 'hosts-fallback' || some_other_condition) {
       //    await this.removeHostsEntries();
       // }
-      
+
       this.isBlocking = false; // Update state
       this.emit('blocking-removed');
       return { success: true };
@@ -483,7 +496,7 @@ class ArseaDaemon extends EventEmitter {
       throw error; // Re-throw for CLI to handle
     }
   }
-  
+
   async createEmergencyBackup() {
     // This method now primarily focuses on ensuring DNSConfigManager has a backup.
     // Hosts file backup is secondary.
@@ -497,8 +510,8 @@ class ArseaDaemon extends EventEmitter {
       }
 
       // Legacy hosts file backup (optional)
-      // await this.createHostsBackup(); 
-      
+      // await this.createHostsBackup();
+
       console.log('✅ Emergency backup routine (DNS primarily) completed.');
     } catch (error) {
       console.warn('⚠️ Error during emergency backup creation:', error.message);
@@ -518,7 +531,7 @@ class ArseaDaemon extends EventEmitter {
   getStats() { // Comprehensive stats
     const dnsProxyRuntimeStats = this.dnsProxy.getStats(); // From ArseaDNSProxy instance
     const uptimeMs = new Date() - this.stats.startTime;
-    
+
     return {
       isRunning: this.isRunning,
       isBlocking: this.isBlocking,
@@ -558,7 +571,7 @@ class ArseaDaemon extends EventEmitter {
       } else {
         console.log('DNS proxy was not running or already stopped.');
       }
-      
+
       // Restore system DNS settings using DNSConfigManager
       // This will use the (hopefully correct) backup.
       if (this.dnsConfig) {
@@ -570,10 +583,10 @@ class ArseaDaemon extends EventEmitter {
             console.error(`❌ Failed to restore system DNS settings: ${restoreResult.error}. Manual check may be required.`);
         }
       }
-      
+
       // Optional: Clean up hosts file entries if they were used
-      // await this.removeHostsEntries(); 
-      
+      // await this.removeHostsEntries();
+
       this.isRunning = false;
       this.isBlocking = false;
       this.emit('shutdown');
@@ -581,7 +594,7 @@ class ArseaDaemon extends EventEmitter {
     } catch (error) {
       console.error('❌ Error during graceful shutdown:', error.message);
       // Even with error, try to ensure isRunning is false
-      this.isRunning = false; 
+      this.isRunning = false;
     }
   }
 
@@ -608,8 +621,8 @@ class ArseaDaemon extends EventEmitter {
       // Avoid creating multiple backups if one identical to current hosts file exists
       // This logic can be more sophisticated, e.g., timestamped backups or checking content
       if (!await fs.access(this.backupPath).then(() => true).catch(() => false)) {
-         await fs.writeFile(this.backupPath, originalContent, 'utf8');
-         console.log(`✅ Hosts file backup created at: ${this.backupPath}`);
+          await fs.writeFile(this.backupPath, originalContent, 'utf8');
+          console.log(`✅ Hosts file backup created at: ${this.backupPath}`);
       } else {
           // console.log('Hosts file backup already exists.');
       }
@@ -644,7 +657,7 @@ class ArseaDaemon extends EventEmitter {
     for (const line of lines) {
       if (line.includes(this.arseaMarker)) {
         inArseaSection = true;
-        continue; 
+        continue;
       }
       if (line.includes(this.arseaEndMarker)) {
         inArseaSection = false;
@@ -656,7 +669,7 @@ class ArseaDaemon extends EventEmitter {
     }
     return filteredLines.join('\n').replace(/\n\n+/g, '\n\n').trim(); // Clean up multiple blank lines
   }
-  
+
   generateLimitedArseaSection(domains) {
     const header = [
       this.arseaMarker,
@@ -684,13 +697,26 @@ class ArseaDaemon extends EventEmitter {
   }
 }
 
-// Export ArseaDaemon class
-module.exports = ArseaDaemon;
+// INTEGRATED: Function to start the API server
+async function startAPIServer(daemonInstance) {
+  try {
+      apiServer = new DaemonAPIServer(daemonInstance); // apiServer is module-level
+      await apiServer.start();
+      // Assuming default port 3847 if not dynamically retrieved from apiServer instance
+      console.log(`✅ API server started successfully on http://127.0.0.1:${apiServer.getPort ? apiServer.getPort() : 3847}`);
+      return apiServer;
+  } catch (error) {
+      console.error('❌ Failed to start API server:', error);
+      // Don't exit here - let the daemon continue without API if needed
+      return null;
+  }
+}
+
 
 // --- Enhanced CLI Interface ---
 if (require.main === module) {
   const args = process.argv.slice(2);
-  
+
   // Helper to parse named arguments like --blocklist-path=/path/to/list.json
   const parseArgValue = (argName) => {
     const arg = args.find(a => a.startsWith(`--${argName}=`));
@@ -709,8 +735,8 @@ if (require.main === module) {
   };
 
   const showStatus = args.includes('--status') || args.includes('-s');
-  const enableBlocking = args.includes('--enable');
-  const disableBlocking = args.includes('--disable');
+  const enableBlockingCli = args.includes('--enable'); // Renamed to avoid conflict
+  const disableBlockingCli = args.includes('--disable'); // Renamed to avoid conflict
   // const toggleBlocking = args.includes('--toggle'); // No toggleBlocking method implemented yet
   // const verbose = args.includes('--verbose') || args.includes('-v'); // Verbosity not deeply implemented yet
   const testDnsResolutionCli = args.includes('--test-dns-resolution'); // More specific test
@@ -718,139 +744,58 @@ if (require.main === module) {
 
   const daemon = new ArseaDaemon(options);
 
+  // INTEGRATED & UPDATED: Graceful shutdown for daemon and API server
+  const gracefulShutdown = async (signal) => {
+    await processManager.gracefulShutdown(signal);
+  };
+
   async function cliRunner() {
-    if (showStatus) {
-      await daemon.dnsConfig.initialize(); // Ensure DNS config is initialized for status
-      // No need to load full blocklist for status, but getStats might expect some parts
-      // daemon.loadBlocklist might be too heavy just for status.
-      // For now, let getStats handle missing parts gracefully or adjust getStats.
-      console.log('\n📊 ARSEA DAEMON STATUS:');
-      console.log('========================');
-      const currentStats = daemon.getStats(); // getStats now includes DNSConfig status
-      // Add live DNS check to status
-      try {
-          currentStats.systemDns.currentSystemServers = await daemon.dnsConfig.getCurrentDNS();
-      } catch (e) {
-          currentStats.systemDns.currentSystemServers = `Error fetching: ${e.message}`;
-      }
-      console.log(JSON.stringify(currentStats, null, 2));
-      return;
-    }
+    // ...other CLI actions...
 
-    if (testDnsResolutionCli) {
-      await daemon.dnsConfig.initialize(); // Needed for testDNSResolution to potentially use dnsConfig
-      console.log('🧪 Running DNS resolution test...');
-      await daemon.testDNSResolution(); // Call the new method
-      return;
-    }
-    
-    if (forceRestoreDns) {
-        console.log('⚙️ Forcing DNS restoration to automatic/DHCP settings...');
-        await daemon.dnsConfig.initialize(); // Initialize DNSConfigManager
-        const result = await daemon.dnsConfig.restoreToAutomatic();
-        if (result.success) console.log('✅ DNS forced restoration attempt successful.');
-        else console.error('❌ DNS forced restoration attempt failed.');
-        return;
-    }
-
-    // Main daemon operations require initialization first
     console.log('Initializing Arsea Daemon for operation...');
+
+    // 1. CHECK FOR EXISTING INSTANCE FIRST (before writing our own PID)
+    const existingInstance = await processManager.checkExistingInstance();
+    if (existingInstance.running) {
+      console.log(`⚠️ Another Arsea daemon is already running (PID: ${existingInstance.pid})`);
+      console.log('Use --force to override or stop the existing instance first.');
+      process.exit(1);
+    }
+
+    // 2. NOW INITIALIZE DAEMON
     const initialized = await daemon.initialize();
     if (!initialized) {
       console.error('Arsea Daemon failed to initialize. Exiting.');
-      process.exit(1); // Exit if initialization fails
+      await gracefulShutdown('INITIALIZATION_FAILURE');
+      return;
     }
 
-    let performedAction = false;
+    // 3. INITIALIZE PROCESS MANAGER (writes PID file)
+    await processManager.initialize(daemon, apiServer);
 
-    if (enableBlocking) {
-      console.log('CLI: Enabling blocking...');
-      daemon.isBlocking = true;
-      await daemon.applyBlocking();
-      performedAction = true;
-    } else if (disableBlocking) {
-      console.log('CLI: Disabling blocking...');
-      daemon.isBlocking = false; // Explicitly set state before calling remove
-      await daemon.removeBlocking();
-      performedAction = true;
-    } 
-    // else if (toggleBlocking) { // Placeholder for toggle
-    //   console.log('CLI: Toggling blocking state...');
-    //   await daemon.toggleBlockingState(); // You would need to implement this method
-    //   performedAction = true;
-    // }
-
-    // Default behavior: if no specific action command, and not dry run for status only, run as persistent daemon
-    if (!performedAction && !(options.dryRun && !enableBlocking && !disableBlocking) ) {
-      if (!daemon.isBlocking) { // If not already enabled by --enable
-          console.log('CLI: Defaulting to enable blocking and run as daemon...');
-          daemon.isBlocking = true;
-      }
-      if(daemon.isBlocking) { // Check again in case it was set
-          await daemon.applyBlocking(); // Apply blocking if now enabled
-          console.log('\n🚀 Enhanced Arsea Daemon is now running in persistent mode...');
-          console.log('   Press Ctrl+C to stop and restore DNS settings.\n');
-          
-          // Keep alive, e.g. by an interval or just let events handle it
-          // The SIGINT/SIGTERM handlers will manage shutdown.
-          // A periodic stat log can be useful for long-running process.
-          setInterval(() => {
-            const liveStats = daemon.getDNSStats();
-            console.log(`[${new Date().toLocaleTimeString()}] 📊 DNS Stats - Queries: ${liveStats.queries}, Blocked: ${liveStats.blocked} (${liveStats.blockRate}%), Allowed: ${liveStats.allowed}`);
-          }, 60000); // Log stats every 60 seconds
-      } else {
-          console.log('Arsea Daemon initialized but blocking is not active. No persistent process started.');
-          // Exit if no action taken and not running persistently
-          process.exit(0); 
-      }
-    } else if (!performedAction && options.dryRun) {
-        console.log('Dry run complete. No actions taken on the system.');
-        process.exit(0);
-    } else if (performedAction) {
-        console.log('Requested action complete. Exiting.');
-        // If an action like --enable or --disable was performed, and it's not meant to be a long-running daemon session afterwards, exit.
-        // However, if --enable is meant to start the daemon persistently, this exit needs to be conditional.
-        // For now, assume --enable/--disable are one-off commands unless combined with other logic to keep running.
-        // The current "default behavior" block tries to handle persistent running.
-        // This path is if an action WAS performed AND we are not in the persistent block.
-        process.exit(0); 
+    // --- Add this block: Show current DNS status after instance check ---
+    try {
+        await daemon.dnsConfig.initialize(); // Ensure DNS config is ready
+        const currentDNS = await daemon.dnsConfig.getCurrentDNS();
+        console.log('\n🔎 Current system DNS servers:', Array.isArray(currentDNS) ? currentDNS.join(', ') : currentDNS);
+    } catch (e) {
+        console.warn('⚠️ Could not retrieve current DNS servers:', e.message);
     }
+
+    // Rest of your existing code continues...
+    if (!options.dryRun || enableBlockingCli || disableBlockingCli) {
+        apiServer = await startAPIServer(daemon);
+    }
+
+    // Continue with the rest of your existing cliRunner logic...
+    // ...existing code...
   }
 
   // Setup signal handlers for graceful shutdown
-  const gracefulShutdown = async (signal) => {
-    console.log(`\nSignal [${signal}] received. Initiating graceful shutdown...`);
-    if (daemon) { // Ensure daemon instance exists
-      await daemon.shutdown();
-    }
-    process.exit(0);
-  };
-  
-  process.on('SIGINT', () => gracefulShutdown('SIGINT')); // Ctrl+C
-  process.on('SIGTERM', () => gracefulShutdown('SIGTERM')); // kill
-  process.on('uncaughtException', async (error) => {
-    console.error('致命的未捕獲異常 (Fatal Uncaught Exception):', error);
-    if (daemon && daemon.isRunning) { // If daemon was running
-        console.log('Attempting emergency DNS restoration due to uncaught exception...');
-        await daemon.dnsConfig.restore(); // Try to restore DNS directly
-    }
-    process.exit(1); // Exit with error code
-  });
-   process.on('unhandledRejection', async (reason, promise) => {
-    console.error('未處理的 Promise 拒絕 (Unhandled Rejection at):', promise, '原因 (reason):', reason);
-    if (daemon && daemon.isRunning) { // If daemon was running
-        console.log('Attempting emergency DNS restoration due to unhandled rejection...');
-        await daemon.dnsConfig.restore(); // Try to restore DNS directly
-    }
-    // process.exit(1); // Optional: exit on unhandled rejections
-  });
+  processManager.setupSignalHandlers();
 
-  cliRunner().catch(error => {
+  cliRunner().catch(async (error) => { // Make catch async
     console.error("❌ An error occurred in the CLI runner:", error);
-    if (daemon) { // Attempt shutdown even if CLI runner fails
-        daemon.shutdown().finally(() => process.exit(1));
-    } else {
-        process.exit(1);
-    }
+    await gracefulShutdown('CLI_RUNNER_ERROR'); // This will call process.exit(1)
   });
 }

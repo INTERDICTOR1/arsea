@@ -12,7 +12,9 @@
   "dependencies": {
     "node-windows": "^1.0.0",
     "node-mac": "^1.0.0",
-    "node-linux": "^0.1.2"
+    "node-linux": "^0.1.2",
+    "express": "^4.18.2",
+    "cors": "^2.8.5"
   },
   "devDependencies": {
     "nodemon": "^3.0.0"

@@ -1,0 +1,11 @@
+{
+  "isBlocking": false,
+  "timestamp": "2025-06-04T09:31:21.956Z",
+  "stats": {
+    "queries": 45,
+    "blocked": 19,
+    "allowed": 26,
+    "blockRate": 42.2
+  },
+  "version": "1.0.0"
+}
