@@ -1,9 +1,13 @@
 {
   "name": "arsea-content-blocker",
-  "version": "1.0.0",
+  "version": "0.1.0",
   "description": "System-wide DNS content blocker",
   "main": "tray/main.js",
   "homepage": "https://github.com/INTERDICTOR1/arsea",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/INTERDICTOR1/arsea.git"
+  },
   "author": "Mohammad Shabir Peerzada",
   "license": "MIT",
   "scripts": {
@@ -26,7 +30,7 @@
   "build": {
     "appId": "com.arsea.contentblocker",
     "productName": "Arsea Content Blocker",
-    "copyright": "Copyright © 2025 Arsea",
+    "copyright": "Copyright © 2024 Arsea",
     "directories": {
       "output": "dist",
       "buildResources": "build"

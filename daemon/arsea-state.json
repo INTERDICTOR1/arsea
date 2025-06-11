@@ -1,6 +1,6 @@
 {
-  "isBlocking": true,
-  "timestamp": "2025-06-11T14:45:36.159Z",
+  "isBlocking": false,
+  "timestamp": "2025-06-11T15:45:20.867Z",
   "stats": {
     "queries": 0,
     "blocked": 0,
