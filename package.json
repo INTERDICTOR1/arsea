@@ -1,0 +1,103 @@
+{
+  "name": "arsea-content-blocker",
+  "version": "1.0.0",
+  "description": "System-wide DNS content blocker",
+  "main": "tray/main.js",
+  "homepage": "https://github.com/INTERDICTOR1/arsea",
+  "author": "Mohammad Shabir Peerzada",
+  "license": "MIT",
+  "scripts": {
+    "start": "electron tray/main.js",
+    "dev": "concurrently \"npm run dev:daemon\" \"npm run dev:tray\"",
+    "dev:daemon": "cd daemon && npm start",
+    "dev:tray": "cd tray && npm start",
+    "build": "electron-builder",
+    "build:win": "electron-builder --win",
+    "build:mac": "electron-builder --mac",
+    "build:linux": "electron-builder --linux",
+    "dist": "npm run build:win",
+    "postinstall": "cd daemon && npm install && cd ../tray && npm install"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.2",
+    "electron": "^36.4.0",
+    "electron-builder": "^26.0.12"
+  },
+  "build": {
+    "appId": "com.arsea.contentblocker",
+    "productName": "Arsea Content Blocker",
+    "copyright": "Copyright © 2025 Arsea",
+    "directories": {
+      "output": "dist",
+      "buildResources": "build"
+    },
+    "files": [
+      "tray/**/*",
+      "daemon/**/*",
+      "blocklist/**/*",
+      "!daemon/node_modules",
+      "!tray/node_modules",
+      "!**/*.log",
+      "!**/test-*",
+      "!documentation/**/*"
+    ],
+    "extraResources": [
+      {
+        "from": "daemon",
+        "to": "daemon",
+        "filter": [
+          "**/*",
+          "!node_modules/**/*"
+        ]
+      },
+      {
+        "from": "blocklist",
+        "to": "blocklist"
+      }
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "tray/assets/icon-active.ico",
+      "requestedExecutionLevel": "requireAdministrator",
+      "artifactName": "${productName}-Setup-${version}.${ext}"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": false,
+      "createStartMenuShortcut": true,
+      "shortcutName": "Arsea Content Blocker",
+      "runAfterFinish": true,
+      "installerIcon": "tray/assets/icon-active.ico",
+      "uninstallerIcon": "tray/assets/icon-inactive.ico"
+    },
+    "mac": {
+      "target": "dmg",
+      "icon": "tray/assets/icon-active.ico",
+      "category": "public.app-category.utilities"
+    },
+    "linux": {
+      "target": [
+        "deb",
+        "rpm"
+      ],
+      "icon": "tray/assets/icon-active.ico",
+      "category": "Network"
+    }
+  },
+  "dependencies": {
+    "axios": "^1.9.0",
+    "cors": "^2.8.5",
+    "express": "^4.18.2",
+    "native-dns-packet": "^0.1.1",
+    "node-windows": "^1.0.0-beta.8",
+    "string-similarity": "^4.0.4"
+  }
+}

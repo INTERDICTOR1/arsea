@@ -1,209 +1,209 @@
-# Arsea Phase 2 - Detailed Implementation Plan
+  # Arsea Phase 2 - Detailed Implementation Plan
 
-## 🎯 Phase 2 Objectives
-Transform standalone daemon into system-integrated service with user controls
+  ## 🎯 Phase 2 Objectives
+  Transform standalone daemon into system-integrated service with user controls
 
-**Architecture**: Daemon (Node.js) + Minimal Electron Tray + HTTP API Communication
+  **Architecture**: Daemon (Node.js) + Minimal Electron Tray + HTTP API Communication
 
----
+  ---
 
-## 📋 Detailed Task Breakdown
+  ## 📋 Detailed Task Breakdown
 
-### **2.1 Minimal Electron Tray Setup** ⏱️ 45 minutes
-**Goal**: Create lightweight Electron wrapper just for system tray functionality
+  ### **2.1 Minimal Electron Tray Setup** ⏱️ 45 minutes
+  **Goal**: Create lightweight Electron wrapper just for system tray functionality
 
-#### **2.1.1 Project Structure Setup** (10 minutes)
-- [ ] Create `tray/` folder in project root
-- [ ] Initialize `package.json` for Electron tray app
-- [ ] Install minimal Electron dependencies
-- [ ] Create basic folder structure:
+  #### **2.1.1 Project Structure Setup** (10 minutes)
+  - [ ] Create `tray/` folder in project root
+  - [ ] Initialize `package.json` for Electron tray app
+  - [ ] Install minimal Electron dependencies
+  - [ ] Create basic folder structure:
+    ```
+    tray/
+    ├── package.json
+    ├── main.js (Electron main process)
+    ├── tray-controller.js (Tray logic)
+    └── assets/
+        ├── icon-active.png (16x16, 32x32)
+        └── icon-inactive.png (16x16, 32x32)
+    ```
+
+  #### **2.1.2 Basic Electron Setup** (15 minutes)
+  - [ ] Create `main.js` with minimal Electron app
+  - [ ] Hide dock icon (no main window needed)
+  - [ ] Set up app ready event handler
+  - [ ] Configure app to quit when all windows/tray closed
+
+  #### **2.1.3 System Tray Implementation** (20 minutes)
+  - [ ] Create tray icon with context menu
+  - [ ] Menu items:
+    - [ ] "Blocking: ON/OFF" (toggle with checkmark)
+    - [ ] "Status: Active/Inactive" (informational)
+    - [ ] Separator
+    - [ ] "Quit Arsea"
+  - [ ] Icon state management (active/inactive)
+  - [ ] Click handlers for menu items
+  - [ ] Test tray appears and responds
+
+  **Deliverable**: Working system tray that shows/hides with basic menu
+
+  ---
+
+  ### **2.2 HTTP API Communication** ⏱️ 30 minutes
+  **Goal**: Enable tray to communicate with daemon via local HTTP API
+
+  #### **2.2.1 Daemon HTTP Server** (15 minutes)
+  - [ ] Add Express.js to daemon dependencies
+  - [ ] Create `api-server.js` in daemon folder
+  - [ ] Implement endpoints:
+    - [ ] `GET /status` - Returns blocking status, stats
+    - [ ] `POST /toggle` - Enable/disable blocking
+    - [ ] `GET /health` - Health check
+  - [ ] Bind server to `127.0.0.1:3847` (secure localhost)
+  - [ ] Integrate API server into main daemon process
+
+  #### **2.2.2 Tray API Client** (15 minutes)
+  - [ ] Add HTTP client to tray (axios/node-fetch)
+  - [ ] Create `daemon-client.js` in tray folder
+  - [ ] Implement client methods:
+    - [ ] `getStatus()` - Fetch current status
+    - [ ] `toggleBlocking()` - Toggle blocking state
+    - [ ] `checkHealth()` - Verify daemon is running
+  - [ ] Error handling for connection failures
+  - [ ] Connect tray menu actions to API calls
+
+  **Deliverable**: Tray can control daemon via HTTP API
+
+  ---
+
+  ### **2.3 Auto-Start Implementation** ⏱️ 30 minutes
+  **Goal**: Both daemon and tray start automatically on system boot
+
+  #### **2.3.1 Daemon Auto-Start** (15 minutes)
+  - [ ] Create `startup-manager.js` in daemon folder
+  - [ ] Implement Windows startup folder approach:
+    - [ ] Create `.bat` or `.cmd` script to launch daemon
+    - [ ] Copy script to `%APPDATA%\Microsoft\Windows\Start Menu\Programs\Startup\`
+  - [ ] Add install/uninstall methods
+  - [ ] Test daemon starts after Windows reboot
+
+  #### **2.3.2 Tray Auto-Start** (15 minutes)
+  - [ ] Create startup script for Electron tray
+  - [ ] Add tray executable to Windows startup
+  - [ ] Ensure tray waits for daemon to be ready
+  - [ ] Test complete auto-start flow
+
+  **Deliverable**: Full system starts automatically after reboot
+
+  ---
+
+  ### **2.4 Process Management** ⏱️ 30 minutes
+  **Goal**: Robust process lifecycle management and error handling
+
+  #### **2.4.1 Daemon Process Management** (15 minutes)
+  - [ ] Add graceful shutdown handling in daemon
+  - [ ] Signal handlers for SIGTERM, SIGINT
+  - [ ] Clean DNS restoration on shutdown
+  - [ ] State persistence (save current settings)
+  - [ ] Add process PID file management
+
+  #### **2.4.2 Tray Process Management** (15 minutes)
+  - [ ] Health monitoring of daemon process
+  - [ ] Auto-reconnect logic if daemon restarts
+  - [ ] Visual indicators when daemon is unreachable
+  - [ ] Proper tray cleanup on quit
+  - [ ] Handle daemon startup delays
+
+  **Deliverable**: Stable process management with proper cleanup
+
+  ---
+
+  ### **2.5 Integration Testing** ⏱️ 30 minutes
+  **Goal**: Verify complete system works together reliably
+
+  #### **2.5.1 Basic Integration Tests** (15 minutes)
+  - [ ] Test daemon starts independently
+  - [ ] Test tray connects to daemon
+  - [ ] Test blocking toggle works end-to-end
+  - [ ] Test system tray updates reflect daemon state
+  - [ ] Test quit/restart scenarios
+
+  #### **2.5.2 Windows System Testing** (15 minutes)
+  - [ ] Test on fresh Windows VM/system
+  - [ ] Verify auto-start after reboot
+  - [ ] Test with different user permissions
+  - [ ] Verify DNS blocking works system-wide
+  - [ ] Test multiple start/stop cycles
+
+  **Deliverable**: Fully tested Phase 2 system ready for Phase 3
+
+  ---
+
+  ## 📁 Final File Structure After Phase 2
+
   ```
-  tray/
-  ├── package.json
-  ├── main.js (Electron main process)
-  ├── tray-controller.js (Tray logic)
-  └── assets/
-      ├── icon-active.png (16x16, 32x32)
-      └── icon-inactive.png (16x16, 32x32)
+  arsea-blocker/
+  ├── daemon/                     # Existing daemon (Phase 1)
+  │   ├── index.js               # Main daemon process
+  │   ├── dns-proxy.js           # DNS blocking logic
+  │   ├── dns-config.js          # DNS configuration
+  │   ├── domains.json           # 180k+ blocked domains
+  │   ├── api-server.js          # NEW: HTTP API server
+  │   ├── startup-manager.js     # NEW: Auto-start management
+  │   └── package.json           # Updated with API dependencies
+  ├── tray/                      # NEW: Electron tray app
+  │   ├── main.js               # Electron main process
+  │   ├── tray-controller.js    # Tray logic and menu
+  │   ├── daemon-client.js      # HTTP client for daemon API
+  │   ├── package.json          # Electron dependencies
+  │   └── assets/
+  │       ├── icon-active.png   # Tray icons
+  │       └── icon-inactive.png
+  └── README.md                  # Updated documentation
   ```
 
-#### **2.1.2 Basic Electron Setup** (15 minutes)
-- [ ] Create `main.js` with minimal Electron app
-- [ ] Hide dock icon (no main window needed)
-- [ ] Set up app ready event handler
-- [ ] Configure app to quit when all windows/tray closed
+  ---
 
-#### **2.1.3 System Tray Implementation** (20 minutes)
-- [ ] Create tray icon with context menu
-- [ ] Menu items:
-  - [ ] "Blocking: ON/OFF" (toggle with checkmark)
-  - [ ] "Status: Active/Inactive" (informational)
-  - [ ] Separator
-  - [ ] "Quit Arsea"
-- [ ] Icon state management (active/inactive)
-- [ ] Click handlers for menu items
-- [ ] Test tray appears and responds
+  ## 🔄 Progress Tracking
 
-**Deliverable**: Working system tray that shows/hides with basic menu
+  ### **Current Status**: Phase 1 Complete ✅
+  - [x] Core daemon with DNS blocking
+  - [x] 180k+ domain blocklist
+  - [x] DNS server method implementation
 
----
+  ### **Phase 2 Progress**: 
+  - [ ] **2.1** Minimal Electron Tray Setup (0/45 min)
+  - [ ] **2.2** HTTP API Communication (0/30 min)  
+  - [ ] **2.3** Auto-Start Implementation (0/30 min)
+  - [ ] **2.4** Process Management (0/30 min)
+  - [ ] **2.5** Integration Testing (0/30 min)
 
-### **2.2 HTTP API Communication** ⏱️ 30 minutes
-**Goal**: Enable tray to communicate with daemon via local HTTP API
+  **Total Phase 2 Time**: 0/165 minutes (2.75 hours)
 
-#### **2.2.1 Daemon HTTP Server** (15 minutes)
-- [ ] Add Express.js to daemon dependencies
-- [ ] Create `api-server.js` in daemon folder
-- [ ] Implement endpoints:
-  - [ ] `GET /status` - Returns blocking status, stats
-  - [ ] `POST /toggle` - Enable/disable blocking
-  - [ ] `GET /health` - Health check
-- [ ] Bind server to `127.0.0.1:3847` (secure localhost)
-- [ ] Integrate API server into main daemon process
+  ---
 
-#### **2.2.2 Tray API Client** (15 minutes)
-- [ ] Add HTTP client to tray (axios/node-fetch)
-- [ ] Create `daemon-client.js` in tray folder
-- [ ] Implement client methods:
-  - [ ] `getStatus()` - Fetch current status
-  - [ ] `toggleBlocking()` - Toggle blocking state
-  - [ ] `checkHealth()` - Verify daemon is running
-- [ ] Error handling for connection failures
-- [ ] Connect tray menu actions to API calls
+  ## 🎯 Success Criteria for Phase 2
 
-**Deliverable**: Tray can control daemon via HTTP API
+  **Must Have (MVP)**:
+  - ✅ System tray icon appears on startup
+  - ✅ Toggle blocking on/off from tray menu
+  - ✅ Visual indication of blocking status
+  - ✅ Auto-start after Windows reboot
+  - ✅ Daemon and tray communicate reliably
 
----
+  **Should Have**:
+  - ✅ Graceful shutdown and cleanup
+  - ✅ Basic error handling and recovery
+  - ✅ Status information in tray
 
-### **2.3 Auto-Start Implementation** ⏱️ 30 minutes
-**Goal**: Both daemon and tray start automatically on system boot
+  **Could Have (Future)**:
+  - 📊 Detailed statistics
+  - 🔧 Advanced configuration
+  - 🌍 macOS/Linux support
 
-#### **2.3.1 Daemon Auto-Start** (15 minutes)
-- [ ] Create `startup-manager.js` in daemon folder
-- [ ] Implement Windows startup folder approach:
-  - [ ] Create `.bat` or `.cmd` script to launch daemon
-  - [ ] Copy script to `%APPDATA%\Microsoft\Windows\Start Menu\Programs\Startup\`
-- [ ] Add install/uninstall methods
-- [ ] Test daemon starts after Windows reboot
+  ---
 
-#### **2.3.2 Tray Auto-Start** (15 minutes)
-- [ ] Create startup script for Electron tray
-- [ ] Add tray executable to Windows startup
-- [ ] Ensure tray waits for daemon to be ready
-- [ ] Test complete auto-start flow
+  ## 🚀 Ready to Start?
 
-**Deliverable**: Full system starts automatically after reboot
+  **Next Step**: Begin with Task 2.1.1 (Project Structure Setup)
 
----
-
-### **2.4 Process Management** ⏱️ 30 minutes
-**Goal**: Robust process lifecycle management and error handling
-
-#### **2.4.1 Daemon Process Management** (15 minutes)
-- [ ] Add graceful shutdown handling in daemon
-- [ ] Signal handlers for SIGTERM, SIGINT
-- [ ] Clean DNS restoration on shutdown
-- [ ] State persistence (save current settings)
-- [ ] Add process PID file management
-
-#### **2.4.2 Tray Process Management** (15 minutes)
-- [ ] Health monitoring of daemon process
-- [ ] Auto-reconnect logic if daemon restarts
-- [ ] Visual indicators when daemon is unreachable
-- [ ] Proper tray cleanup on quit
-- [ ] Handle daemon startup delays
-
-**Deliverable**: Stable process management with proper cleanup
-
----
-
-### **2.5 Integration Testing** ⏱️ 30 minutes
-**Goal**: Verify complete system works together reliably
-
-#### **2.5.1 Basic Integration Tests** (15 minutes)
-- [ ] Test daemon starts independently
-- [ ] Test tray connects to daemon
-- [ ] Test blocking toggle works end-to-end
-- [ ] Test system tray updates reflect daemon state
-- [ ] Test quit/restart scenarios
-
-#### **2.5.2 Windows System Testing** (15 minutes)
-- [ ] Test on fresh Windows VM/system
-- [ ] Verify auto-start after reboot
-- [ ] Test with different user permissions
-- [ ] Verify DNS blocking works system-wide
-- [ ] Test multiple start/stop cycles
-
-**Deliverable**: Fully tested Phase 2 system ready for Phase 3
-
----
-
-## 📁 Final File Structure After Phase 2
-
-```
-arsea-blocker/
-├── daemon/                     # Existing daemon (Phase 1)
-│   ├── index.js               # Main daemon process
-│   ├── dns-proxy.js           # DNS blocking logic
-│   ├── dns-config.js          # DNS configuration
-│   ├── domains.json           # 180k+ blocked domains
-│   ├── api-server.js          # NEW: HTTP API server
-│   ├── startup-manager.js     # NEW: Auto-start management
-│   └── package.json           # Updated with API dependencies
-├── tray/                      # NEW: Electron tray app
-│   ├── main.js               # Electron main process
-│   ├── tray-controller.js    # Tray logic and menu
-│   ├── daemon-client.js      # HTTP client for daemon API
-│   ├── package.json          # Electron dependencies
-│   └── assets/
-│       ├── icon-active.png   # Tray icons
-│       └── icon-inactive.png
-└── README.md                  # Updated documentation
-```
-
----
-
-## 🔄 Progress Tracking
-
-### **Current Status**: Phase 1 Complete ✅
-- [x] Core daemon with DNS blocking
-- [x] 180k+ domain blocklist
-- [x] DNS server method implementation
-
-### **Phase 2 Progress**: 
-- [ ] **2.1** Minimal Electron Tray Setup (0/45 min)
-- [ ] **2.2** HTTP API Communication (0/30 min)  
-- [ ] **2.3** Auto-Start Implementation (0/30 min)
-- [ ] **2.4** Process Management (0/30 min)
-- [ ] **2.5** Integration Testing (0/30 min)
-
-**Total Phase 2 Time**: 0/165 minutes (2.75 hours)
-
----
-
-## 🎯 Success Criteria for Phase 2
-
-**Must Have (MVP)**:
-- ✅ System tray icon appears on startup
-- ✅ Toggle blocking on/off from tray menu
-- ✅ Visual indication of blocking status
-- ✅ Auto-start after Windows reboot
-- ✅ Daemon and tray communicate reliably
-
-**Should Have**:
-- ✅ Graceful shutdown and cleanup
-- ✅ Basic error handling and recovery
-- ✅ Status information in tray
-
-**Could Have (Future)**:
-- 📊 Detailed statistics
-- 🔧 Advanced configuration
-- 🌍 macOS/Linux support
-
----
-
-## 🚀 Ready to Start?
-
-**Next Step**: Begin with Task 2.1.1 (Project Structure Setup)
-
-Would you like to proceed with implementing **2.1.1 Project Structure Setup** first, or would you prefer to adjust anything in this plan?
+  Would you like to proceed with implementing **2.1.1 Project Structure Setup** first, or would you prefer to adjust anything in this plan?

@@ -1,6 +1,7 @@
 const https = require('https');
 const fs = require('fs');
 const path = require('path');
+const DomainAI = require('./domain-ai');
 
 
 const BLOCKLIST_URLS = [
@@ -10,6 +11,7 @@ const BLOCKLIST_URLS = [
 ];
 
 let blockedDomains = new Set();
+let domainAI = null;
 
 /**
  * Downloads blocklist from URL with timeout and error handling
@@ -190,29 +192,6 @@ async function loadFromFile() {
 }
 
 /**
- * Check if domain is blocked (supports subdomains)
- */
-function isBlocked(domain) {
-  if (!domain) return false;
-  
-  domain = domain.toLowerCase().replace(/^www\./, '');
-  
-  // Direct match
-  if (blockedDomains.has(domain)) return true;
-  
-  // Check parent domains (subdomain blocking)
-  const parts = domain.split('.');
-  for (let i = 1; i < parts.length; i++) {
-    const parentDomain = parts.slice(i).join('.');
-    if (blockedDomains.has(parentDomain)) {
-      return true;
-    }
-  }
-  
-  return false;
-}
-
-/**
  * Initialize blocklist (try cache first, then download)
  */
 async function initialize() {
@@ -228,6 +207,46 @@ async function initialize() {
       loadBlocklists().catch(console.error);
     }, 5000);
   }
+
+  // Initialize AI
+  domainAI = new DomainAI({
+    similarityThreshold: 0.85,
+    learningRate: 0.1
+  });
+  console.log('🤖 AI domain detection initialized');
+}
+
+/**
+ * Check if domain is blocked (supports subdomains and AI detection)
+ */
+async function isBlocked(domain) {
+  if (!domain) return false;
+  
+  domain = domain.toLowerCase().replace(/^www\./, '');
+  
+  // Direct match
+  if (blockedDomains.has(domain)) {
+    return { blocked: true, reason: 'direct_match' };
+  }
+  
+  // Check parent domains (subdomain blocking)
+  const parts = domain.split('.');
+  for (let i = 1; i < parts.length; i++) {
+    const parentDomain = parts.slice(i).join('.');
+    if (blockedDomains.has(parentDomain)) {
+      return { blocked: true, reason: 'subdomain_match', parent: parentDomain };
+    }
+  }
+
+  // AI analysis
+  if (domainAI) {
+    const aiResult = await domainAI.analyzeDomain(domain, blockedDomains);
+    if (aiResult.blocked) {
+      return aiResult;
+    }
+  }
+  
+  return { blocked: false };
 }
 
 /**
@@ -236,8 +255,18 @@ async function initialize() {
 function getStats() {
   return {
     totalDomains: blockedDomains.size,
-    sources: BLOCKLIST_URLS.length
+    sources: BLOCKLIST_URLS.length,
+    aiStats: domainAI ? domainAI.getStats() : null
   };
+}
+
+/**
+ * Provide feedback to AI about blocking decision
+ */
+async function provideFeedback(domain, wasBlocked, correctDecision) {
+  if (domainAI) {
+    await domainAI.learnFromDecision(domain, wasBlocked, correctDecision);
+  }
 }
 
 module.exports = {
@@ -245,5 +274,6 @@ module.exports = {
   isBlocked,
   getStats,
   loadBlocklists,
-  getDomains: () => Array.from(blockedDomains)
+  getDomains: () => Array.from(blockedDomains),
+  provideFeedback
 };

@@ -2,6 +2,42 @@ const { Tray, Menu, app, nativeImage } = require('electron');
 const path = require('path');
 const DaemonClient = require('./daemon-client');
 const DaemonHealthMonitor = require('./daemon-health-monitor');
+const { execSync } = require('child_process');
+
+// --- Auto-start helpers ---
+const appName = 'ArseaContentBlocker';
+
+function setupAutoStart(enable) {
+    if (process.platform !== 'win32') return;
+    const exePath = process.execPath;
+    try {
+        if (enable) {
+            const regCommand = `reg add "HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run" /v "${appName}" /t REG_SZ /d "${exePath}" /f`;
+            execSync(regCommand);
+            console.log('Auto-start enabled');
+        } else {
+            const regCommand = `reg delete "HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run" /v "${appName}" /f`;
+            execSync(regCommand);
+            console.log('Auto-start disabled');
+        }
+        return true;
+    } catch (error) {
+        console.error('Failed to setup auto-start:', error);
+        return false;
+    }
+}
+
+function isAutoStartEnabled() {
+    if (process.platform !== 'win32') return false;
+    try {
+        const regCommand = `reg query "HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run" /v "${appName}"`;
+        execSync(regCommand);
+        return true;
+    } catch (error) {
+        return false;
+    }
+}
+// --- End auto-start helpers ---
 
 class TrayController {
     constructor() {
@@ -110,6 +146,20 @@ class TrayController {
         const healthStatus = this.healthMonitor.getHealthStatus();
         const connectionStatus = healthStatus.isHealthy ? 'Connected' : 'Disconnected';
 
+        // --- Add auto-start menu item ---
+        const autoStartEnabled = isAutoStartEnabled();
+        const autoStartMenuItem = {
+            label: `Auto-start: ${autoStartEnabled ? 'ON' : 'OFF'}`,
+            click: () => {
+                const newState = !autoStartEnabled;
+                if (setupAutoStart(newState)) {
+                    // Refresh menu to reflect new state
+                    setTimeout(() => this.updateMenu(), 500);
+                }
+            }
+        };
+        // --- End auto-start menu item ---
+
         const menuTemplate = [
             { label: `Status: ${connectionStatus}`, enabled: false },
             { type: 'separator' },
@@ -132,6 +182,7 @@ class TrayController {
                 enabled: false
             },
             { type: 'separator' },
+            autoStartMenuItem, // <-- Inserted here
             {
                 label: this.currentStatus.isBlocking ? 'Disable Blocking' : 'Enable Blocking',
                 enabled: this.currentStatus.isAvailable,
